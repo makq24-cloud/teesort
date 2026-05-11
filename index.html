@@ -68,14 +68,18 @@
   .badge.shirt:active{transform:scale(.92)}
   .badge .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
   .badge .edit-pip{width:5px;height:5px;border-radius:50%;background:#7dd3fc;display:inline-block;margin-left:2px}
+  .badge .export-pip{width:5px;height:5px;border-radius:50%;background:#86efac;display:inline-block;margin-left:2px}
+  .viewer-slide img{transform-origin:center center;will-change:transform}
   .badge.status-round1{background:rgba(56,189,248,.22);color:#7dd3fc;border-color:rgba(56,189,248,.4)}
   .badge.status-finalist{background:rgba(168,85,247,.22);color:#d8b4fe;border-color:rgba(168,85,247,.4)}
   .badge.status-needs_fixing{background:rgba(245,158,11,.22);color:#fcd34d;border-color:rgba(245,158,11,.4)}
   .badge.status-ready_upscale{background:rgba(34,197,94,.22);color:#86efac;border-color:rgba(34,197,94,.4)}
   .badge.status-rejected{background:rgba(239,68,68,.22);color:#fca5a5;border-color:rgba(239,68,68,.4)}
+  .badge.status-archived{background:rgba(150,150,150,.22);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.18)}
 
   .actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-top:1px solid rgba(255,255,255,.06)}
-  .action{height:42px;display:grid;place-items:center;background:transparent;color:rgba(255,255,255,.55);transition:all .12s;border-right:1px solid rgba(255,255,255,.06)}
+  .action{height:42px;display:grid;place-items:center;background:transparent;color:rgba(255,255,255,.55);transition:all .12s;border-right:1px solid rgba(255,255,255,.06);touch-action:manipulation;-webkit-user-select:none;user-select:none}
+  .badge.shirt{touch-action:manipulation}
   .action:last-child{border-right:0}
   .action:active{background:rgba(255,255,255,.08)}
   .action.keep.on{background:rgba(56,189,248,.18);color:#7dd3fc}
@@ -159,6 +163,7 @@
   .seg-status button.needs_fixing.on{background:rgba(245,158,11,.22);color:#fcd34d}
   .seg-status button.ready_upscale.on{background:rgba(34,197,94,.22);color:#86efac}
   .seg-status button.rejected.on{background:rgba(239,68,68,.22);color:#fca5a5}
+  .seg-status button.archived.on{background:rgba(150,150,150,.25);color:rgba(255,255,255,.85)}
 
   .notes-row{position:relative;margin-top:4px}
   .notes-done{position:absolute;top:6px;right:6px;height:26px;padding:0 11px;border-radius:999px;background:#fff;color:#000;font-size:11.5px;font-weight:600;opacity:0;transform:scale(.9);transition:opacity .15s,transform .15s;pointer-events:none;z-index:2}
@@ -276,7 +281,14 @@
       <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;line-height:1.4">Lower if dark detail in your graphics is being eaten away.</div>
     </div>
     <div class="sheet-section">
-      <button class="ghost danger" id="resetBatch">Reset batch</button>
+      <h3>Cleanup &amp; export</h3>
+      <button class="ghost" id="archiveRejected" style="margin-top:0">Archive all rejected designs</button>
+      <button class="ghost" id="exportKeeps">Export Keeps + Ready (originals)</button>
+      <button class="ghost" id="exportAllKeeps">Re-export all (including already exported)</button>
+      <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;line-height:1.4">Export shares the original HQ graphic files via iOS share sheet. Save to Photos or Files. Already-exported designs show a green dot and skip on the standard export.</div>
+    </div>
+    <div class="sheet-section">
+      <button class="ghost danger" id="resetBatch">Reset batch (delete all)</button>
     </div>
   </div>
 </div>
@@ -366,12 +378,13 @@
         <div class="slider-labels"><span>\u2191 Up</span><span>Down \u2193</span></div>
       </div>
     </div>
-    <div class="seg-status" id="segStatus">
+    <div class="seg-status" id="segStatus" style="grid-template-columns:repeat(6,1fr)">
       <button class="round1" data-s="round1">Keep</button>
       <button class="finalist" data-s="finalist">Finalist</button>
       <button class="needs_fixing" data-s="needs_fixing">Fix</button>
       <button class="ready_upscale" data-s="ready_upscale">Ready</button>
       <button class="rejected" data-s="rejected">Reject</button>
+      <button class="archived" data-s="archived">Archive</button>
     </div>
     <div class="notes-row" id="notesRow">
       <textarea id="notesArea" placeholder="Notes \u2014 face off, replace Britney, text weird..."></textarea>
@@ -486,8 +499,8 @@ async function dbClear(){
 }
 
 const SETTINGS_KEY = 'teesort_v2_settings', VIEW_KEY = 'teesort_v2_view';
-const STATUSES = ['round1','finalist','needs_fixing','ready_upscale','rejected'];
-const STATUS_LABELS = {inbox:'New', round1:'Keep', finalist:'Finalist', needs_fixing:'Fix', ready_upscale:'Ready', rejected:'Rejected'};
+const STATUSES = ['round1','finalist','needs_fixing','ready_upscale','rejected','archived'];
+const STATUS_LABELS = {inbox:'New', round1:'Keep', finalist:'Finalist', needs_fixing:'Fix', ready_upscale:'Ready', rejected:'Rejected', archived:'Archived'};
 
 // Print zones - calibrated to 959x1198 mockup
 // 15x18 sized to feel like an oversized chest print (the user's default)
@@ -496,7 +509,7 @@ const ZONES = {
   '15x18':      {maxW:0.355, maxH:0.430, topY:0.310, label:'15\u00d718'},
   '12x16':      {maxW:0.280, maxH:0.360, topY:0.310, label:'12\u00d716'},
   'horizontal': {maxW:0.300, maxH:0.100, topY:0.395, label:'Horizontal'},
-  'full':       {maxW:0.395, maxH:0.510, topY:0.300, label:'Full front'}
+  'full':       {maxW:0.360, maxH:0.470, topY:0.300, label:'Full front'}
 };
 
 let state = {
@@ -741,7 +754,8 @@ function renderFilters(){
   const items = [
     {k:'all', label:'All'},{k:'inbox', label:'New'},{k:'round1', label:'Keep'},
     {k:'finalist', label:'Finalist'},{k:'needs_fixing', label:'Fix'},
-    {k:'ready_upscale', label:'Ready'},{k:'rejected', label:'Rejected'}
+    {k:'ready_upscale', label:'Ready'},{k:'rejected', label:'Rejected'},
+    {k:'archived', label:'Archived'}
   ];
   $('filters').innerHTML = items.map(it => {
     const c = counts[it.k] || 0;
@@ -767,9 +781,25 @@ function renderEmpty(){
 }
 
 function getFiltered(){
-  if(state.filter === 'all') return state.designs;
+  if(state.filter === 'all') return state.designs.filter(d => d.status !== 'archived');
   if(state.filter === 'inbox') return state.designs.filter(d => d.status === 'inbox' || !STATUSES.includes(d.status));
   return state.designs.filter(d => d.status === state.filter);
+}
+
+let _cardObserver = null;
+function ensureCardObserver(){
+  if(_cardObserver) _cardObserver.disconnect();
+  _cardObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if(entry.isIntersecting){
+        const id = entry.target.dataset.id;
+        if(id && !entry.target.dataset.rendered){
+          entry.target.dataset.rendered = '1';
+          renderCardComposite(id);
+        }
+      }
+    });
+  }, {root: null, rootMargin: '400px 0px', threshold: 0.01});
 }
 
 function renderGrid(){
@@ -779,8 +809,13 @@ function renderGrid(){
     return;
   }
   main.innerHTML = `<div class="grid cols-${state.gridCols}">${filtered.map(cardHtml).join('')}</div>`;
-  filtered.forEach(d => renderCardComposite(d.id));
-  filtered.forEach(d => attachCardHandlers(d.id));
+  ensureCardObserver();
+  // Observe each card for lazy rendering - prevents 200 simultaneous composites
+  filtered.forEach(d => {
+    const el = document.querySelector(`.card[data-id="${d.id}"]`);
+    if(el) _cardObserver.observe(el);
+    attachCardHandlers(d.id);
+  });
 }
 
 function cardHtml(d){
@@ -793,7 +828,7 @@ function cardHtml(d){
       <div class="card-preview">
         <div class="card-skeleton"></div>
         <div class="card-tl">
-          <button class="badge shirt"><span class="dot" style="background:${dotColor}"></span><span class="shirt-text">${shirtBadgeText(d)}</span>${editPip}</button>
+          <button class="badge shirt"><span class="dot" style="background:${dotColor}"></span><span class="shirt-text">${shirtBadgeText(d)}</span>${editPip}${d.exportedAt ? '<span class="export-pip"></span>' : ''}</button>
         </div>
         <div class="card-tr">
           ${(d.status && d.status !== 'inbox') ? `<span class="badge status status-${d.status}"><span class="label">${STATUS_LABELS[d.status]||d.status}</span></span>` : ''}
@@ -825,10 +860,14 @@ function attachCardHandlers(id){
     if(e.target.closest('.badge.shirt')) return;
     openViewer(id);
   });
-  el.querySelector('.badge.shirt').onclick = e => { e.stopPropagation(); cycleShirt(id); };
-  el.querySelector('.action.keep').onclick = e => { e.stopPropagation(); setStatus(id, 'round1'); };
-  el.querySelector('.action.fix').onclick = e => { e.stopPropagation(); setStatus(id, 'needs_fixing'); };
-  el.querySelector('.action.reject').onclick = e => { e.stopPropagation(); setStatus(id, 'rejected'); };
+  const badge = el.querySelector('.badge.shirt');
+  badge.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); cycleShirt(id); });
+  const keepBtn = el.querySelector('.action.keep');
+  const fixBtn = el.querySelector('.action.fix');
+  const rejBtn = el.querySelector('.action.reject');
+  if(keepBtn) keepBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); setStatus(id, 'round1'); });
+  if(fixBtn) fixBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); setStatus(id, 'needs_fixing'); });
+  if(rejBtn) rejBtn.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); setStatus(id, 'rejected'); });
 
   // Long-press
   preview.addEventListener('touchstart', e => {
@@ -862,13 +901,18 @@ async function renderCardComposite(id){
     const outputW = state.gridCols === 1 ? 900 : state.gridCols === 2 ? 600 : 460;
     const url = await composite(d, state.settings, outputW);
     const img = new Image();
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s';
     img.onload = () => {
       const skel = wrap.querySelector('.card-skeleton');
-      if(skel) skel.remove();
-      const old = wrap.querySelector('img');
-      if(old) old.remove();
-      img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+      // Insert new image first, fade it in, THEN remove old after fade
       wrap.insertBefore(img, wrap.firstChild);
+      requestAnimationFrame(() => { img.style.opacity = '1'; });
+      setTimeout(() => {
+        const oldImgs = wrap.querySelectorAll('img');
+        // Keep the new one (first child after insert)
+        oldImgs.forEach(x => { if(x !== img) x.remove(); });
+        if(skel) skel.remove();
+      }, 220);
     };
     img.src = url;
   } catch(e){ console.error('composite err', e); }
@@ -903,7 +947,7 @@ function updateCardShirtBadgeInPlace(d){
   const resolved = d.shirtOverride || (state.settings.shirtMode === 'auto' ? d.resolvedShirt : state.settings.shirtMode);
   const dotColor = resolved === 'black' ? '#000' : '#fff';
   const editPip = isEdited(d) ? '<span class="edit-pip"></span>' : '';
-  badge.innerHTML = `<span class="dot" style="background:${dotColor}"></span><span class="shirt-text">${shirtBadgeText(d)}</span>${editPip}`;
+  badge.innerHTML = `<span class="dot" style="background:${dotColor}"></span><span class="shirt-text">${shirtBadgeText(d)}</span>${editPip}${d.exportedAt ? '<span class="export-pip"></span>' : ''}`;
   el.classList.toggle('edited', isEdited(d));
 }
 
@@ -1287,6 +1331,89 @@ $('knockout').addEventListener('change', e => {
   state.settings.knockout = +e.target.value;
   saveSettings(); invalidateCache(); renderGrid();
 });
+// Archive all rejected designs
+$('archiveRejected').onclick = async () => {
+  const rejected = state.designs.filter(d => d.status === 'rejected');
+  if(rejected.length === 0){ showToast('Nothing to archive'); return; }
+  if(!confirm(`Archive ${rejected.length} rejected design${rejected.length===1?'':'s'}? They'll be hidden from default views but kept in the Archived filter.`)) return;
+  for(const d of rejected){ d.status = 'archived'; await persistDesign(d); }
+  invalidateCache();
+  closeSettings();
+  render();
+  showToast(`Archived ${rejected.length} design${rejected.length===1?'':'s'}`);
+};
+
+// Export Keeps + Finalist + Ready via iOS share sheet
+async function exportDesigns(designs, forceAll){
+  if(!designs.length){ showToast('Nothing to export'); return; }
+  const toExport = forceAll ? designs : designs.filter(d => !d.exportedAt);
+  if(!toExport.length){
+    showToast('All already exported. Use "Re-export all" to override.');
+    return;
+  }
+  closeSettings();
+  // Try Web Share API with files
+  const files = [];
+  for(const d of toExport){
+    if(!d.blob) continue;
+    const name = (d.name || 'design').replace(/\.(jpg|jpeg|png|webp|heic)$/i, '') + '.' + (d.blob.type.split('/')[1] || 'png');
+    files.push(new File([d.blob], name, {type: d.blob.type || 'image/png'}));
+  }
+  if(!files.length){ showToast('No exportable files'); return; }
+  // iOS Web Share has a limit on number of files - share in batches of 10
+  const BATCH = 10;
+  let exported = 0;
+  for(let i = 0; i < files.length; i += BATCH){
+    const chunk = files.slice(i, i + BATCH);
+    try {
+      if(navigator.canShare && navigator.canShare({files: chunk})){
+        await navigator.share({
+          files: chunk,
+          title: 'TeeSort export',
+          text: `${chunk.length} design${chunk.length===1?'':'s'}`
+        });
+        // Mark these as exported
+        for(let j = 0; j < chunk.length; j++){
+          const d = toExport[i + j];
+          if(d){ d.exportedAt = Date.now(); await persistDesign(d); }
+        }
+        exported += chunk.length;
+      } else {
+        // Fallback: trigger download per file
+        for(let j = 0; j < chunk.length; j++){
+          const file = chunk[j];
+          const url = URL.createObjectURL(file);
+          const a = document.createElement('a');
+          a.href = url; a.download = file.name;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          const d = toExport[i + j];
+          if(d){ d.exportedAt = Date.now(); await persistDesign(d); }
+          exported++;
+        }
+      }
+    } catch(err){
+      if(err.name === 'AbortError'){
+        showToast(`Export canceled. ${exported} exported so far.`);
+        renderGrid();
+        return;
+      }
+      console.error('export err', err);
+    }
+  }
+  showToast(`Exported ${exported} design${exported===1?'':'s'}`);
+  renderGrid();
+}
+
+$('exportKeeps').onclick = async () => {
+  const targets = state.designs.filter(d => ['round1','finalist','ready_upscale'].includes(d.status));
+  await exportDesigns(targets, false);
+};
+$('exportAllKeeps').onclick = async () => {
+  const targets = state.designs.filter(d => ['round1','finalist','ready_upscale'].includes(d.status));
+  await exportDesigns(targets, true);
+};
+
 $('resetBatch').onclick = async () => {
   if(confirm('Delete all designs?')){ await dbClear(); state.designs = []; invalidateCache(); closeSettings(); render(); }
 };
@@ -1327,6 +1454,7 @@ $('fileInput').addEventListener('change', async e => {
         vOffsetOverride: 0,
         status: 'inbox',
         notes: '',
+        exportedAt: null,
         createdAt: Date.now()
       };
       await dbPut(rec);
@@ -1346,64 +1474,77 @@ $('fileInput').addEventListener('change', async e => {
 });
 
 
-// ===== Fullscreen viewer =====
+// ===== Fullscreen viewer (rewritten) =====
 let viewerState = {
-  ids: [],     // ordered list of design ids in current filter
+  ids: [],
   index: 0,
-  view: 'preview', // preview or original
+  view: 'preview',
   dragging: false,
   startX: 0,
-  currentX: 0,
-  trackEl: null
+  startY: 0,
+  axis: null,
+  zoom: 1,
+  pinching: false,
+  startDist: 0
 };
 
-function getFilteredIds(){
-  return getFiltered().map(d => d.id);
-}
+function getFilteredIds(){ return getFiltered().map(d => d.id); }
 
 function openViewer(startId){
   viewerState.ids = getFilteredIds();
   viewerState.index = Math.max(0, viewerState.ids.indexOf(startId));
   viewerState.view = 'preview';
+  viewerState.zoom = 1;
   $('viewer').classList.add('open');
   buildViewerSlides();
-  updateViewerActions();
+  renderViewerSlide();
+  updateViewerUI();
 }
 
 function closeViewer(){
   $('viewer').classList.remove('open');
   $('viewerTrack').innerHTML = '';
   viewerState.ids = [];
+  viewerState.zoom = 1;
 }
 
 function buildViewerSlides(){
+  // Just 3 reusable slots: prev, current, next. We swap content as user navigates.
   const track = $('viewerTrack');
-  viewerState.trackEl = track;
-  track.innerHTML = '';
-  // Create 3 slides: prev, current, next (windowed)
-  // For simplicity we just render all slides since lists are usually < 100
-  viewerState.ids.forEach((id, i) => {
-    const slide = document.createElement('div');
-    slide.className = 'viewer-slide';
-    slide.dataset.idx = i;
-    slide.innerHTML = '<div class="skel"></div>';
-    track.appendChild(slide);
-  });
-  positionTrack(false);
-  loadSlide(viewerState.index);
-  loadSlide(viewerState.index - 1);
-  loadSlide(viewerState.index + 1);
-  updateViewerHeader();
+  track.innerHTML = '<div class="viewer-slide" data-slot="prev"></div><div class="viewer-slide current" data-slot="cur"></div><div class="viewer-slide" data-slot="next"></div>';
+  positionSlots();
 }
 
-async function loadSlide(idx){
-  if(idx < 0 || idx >= viewerState.ids.length) return;
+function positionSlots(animate){
+  const slides = $('viewerTrack').querySelectorAll('.viewer-slide');
+  slides.forEach(s => {
+    s.style.transition = animate ? 'transform .25s cubic-bezier(.32,.72,0,1)' : 'none';
+  });
+  const prev = $('viewerTrack').querySelector('[data-slot="prev"]');
+  const cur = $('viewerTrack').querySelector('[data-slot="cur"]');
+  const next = $('viewerTrack').querySelector('[data-slot="next"]');
+  if(prev) prev.style.transform = 'translateX(-100%)';
+  if(cur)  cur.style.transform  = 'translateX(0%)';
+  if(next) next.style.transform = 'translateX(100%)';
+}
+
+async function renderToSlot(slot, idx){
+  if(idx < 0 || idx >= viewerState.ids.length){
+    slot.innerHTML = '';
+    return;
+  }
   const id = viewerState.ids[idx];
   const d = state.designs.find(x => x.id === id);
-  if(!d || !d.blob) return;
-  const slide = $('viewerTrack').querySelector(`.viewer-slide[data-idx="${idx}"]`);
-  if(!slide) return;
-  if(slide.dataset.loadedView === viewerState.view) return;
+  if(!d || !d.blob){
+    slot.innerHTML = '<div class="skel"></div>';
+    return;
+  }
+  // Show skeleton while loading
+  if(!slot.querySelector('img') || slot.dataset.id !== id || slot.dataset.view !== viewerState.view){
+    slot.innerHTML = '<div class="skel"></div>';
+  }
+  slot.dataset.id = id;
+  slot.dataset.view = viewerState.view;
   try {
     let url;
     if(viewerState.view === 'original'){
@@ -1416,112 +1557,201 @@ async function loadSlide(idx){
     } else {
       url = await composite(d, state.settings, 1100);
     }
-    const skel = slide.querySelector('.skel');
-    let img = slide.querySelector('img');
-    if(!img){ img = document.createElement('img'); slide.appendChild(img); }
-    img.onload = () => { if(skel) skel.remove(); };
+    // Recheck: if user navigated away, abort
+    if(slot.dataset.id !== id || slot.dataset.view !== viewerState.view) return;
+    const img = document.createElement('img');
+    img.style.opacity = '0';
+    img.style.transition = 'opacity .15s';
+    img.onload = () => {
+      slot.innerHTML = '';
+      slot.appendChild(img);
+      requestAnimationFrame(() => img.style.opacity = '1');
+    };
     img.src = url;
-    slide.dataset.loadedView = viewerState.view;
-  } catch(e){ console.error('viewer load', e); }
+  } catch(e){ console.error('viewer renderToSlot', e); }
 }
 
-function positionTrack(animate){
-  const track = $('viewerTrack');
-  if(animate) track.style.transition = 'transform .25s cubic-bezier(.32,.72,0,1)';
-  else track.style.transition = 'none';
-  track.style.transform = `translateX(-${viewerState.index * 100}%)`;
+function renderViewerSlide(){
+  const prev = $('viewerTrack').querySelector('[data-slot="prev"]');
+  const cur = $('viewerTrack').querySelector('[data-slot="cur"]');
+  const next = $('viewerTrack').querySelector('[data-slot="next"]');
+  renderToSlot(cur, viewerState.index);
+  renderToSlot(prev, viewerState.index - 1);
+  renderToSlot(next, viewerState.index + 1);
 }
 
-function updateViewerHeader(){
-  const d = state.designs.find(x => x.id === viewerState.ids[viewerState.index]);
-  if(!d) return;
+function updateViewerUI(){
+  const id = viewerState.ids[viewerState.index];
+  const d = state.designs.find(x => x.id === id);
+  if(!d){ closeViewer(); return; }
   $('viewerPos').textContent = `${viewerState.index + 1} / ${viewerState.ids.length}`;
   $('viewerLabel').textContent = viewerState.view === 'original' ? 'Original' : (d.name || 'Preview');
-}
-
-function updateViewerActions(){
-  const d = state.designs.find(x => x.id === viewerState.ids[viewerState.index]);
-  if(!d) return;
   $('vaKeep').classList.toggle('on', d.status === 'round1');
   $('vaFix').classList.toggle('on', d.status === 'needs_fixing');
   $('vaReject').classList.toggle('on', d.status === 'rejected');
 }
 
-function gotoSlide(idx){
-  idx = Math.max(0, Math.min(viewerState.ids.length - 1, idx));
-  if(idx === viewerState.index) return;
-  viewerState.index = idx;
-  positionTrack(true);
-  loadSlide(idx);
-  loadSlide(idx - 1);
-  loadSlide(idx + 1);
-  updateViewerHeader();
-  updateViewerActions();
+function gotoSlide(direction){
+  // direction: -1 prev, +1 next
+  const newIdx = viewerState.index + direction;
+  if(newIdx < 0 || newIdx >= viewerState.ids.length){
+    // Bounce back
+    positionSlots(true);
+    return;
+  }
+  viewerState.index = newIdx;
+  viewerState.zoom = 1;
+  applyZoomTransform();
+  // Animate the appropriate slot offscreen and reposition all three
+  const track = $('viewerTrack');
+  const slides = track.querySelectorAll('.viewer-slide');
+  slides.forEach(s => {
+    s.style.transition = 'transform .28s cubic-bezier(.32,.72,0,1)';
+  });
+  // Shift positions: if direction +1 (next), current becomes prev, next becomes current, old prev becomes new next
+  if(direction === 1){
+    // Slide everything left
+    slides.forEach(s => {
+      const slot = s.dataset.slot;
+      if(slot === 'prev') s.style.transform = 'translateX(-200%)';
+      else if(slot === 'cur') s.style.transform = 'translateX(-100%)';
+      else if(slot === 'next') s.style.transform = 'translateX(0%)';
+    });
+  } else {
+    slides.forEach(s => {
+      const slot = s.dataset.slot;
+      if(slot === 'prev') s.style.transform = 'translateX(0%)';
+      else if(slot === 'cur') s.style.transform = 'translateX(100%)';
+      else if(slot === 'next') s.style.transform = 'translateX(200%)';
+    });
+  }
+  // After animation, rotate slot roles and reset positions
+  setTimeout(() => {
+    if(direction === 1){
+      // prev <- cur, cur <- next, next <- (load new)
+      const prev = track.querySelector('[data-slot="prev"]');
+      const cur = track.querySelector('[data-slot="cur"]');
+      const next = track.querySelector('[data-slot="next"]');
+      prev.dataset.slot = 'next-old';  // temp
+      cur.dataset.slot = 'prev';
+      next.dataset.slot = 'cur';
+      prev.dataset.slot = 'next';
+    } else {
+      const prev = track.querySelector('[data-slot="prev"]');
+      const cur = track.querySelector('[data-slot="cur"]');
+      const next = track.querySelector('[data-slot="next"]');
+      next.dataset.slot = 'prev-old';
+      cur.dataset.slot = 'next';
+      prev.dataset.slot = 'cur';
+      next.dataset.slot = 'prev';
+    }
+    positionSlots(false);
+    renderViewerSlide();
+    updateViewerUI();
+  }, 290);
+}
+
+function applyZoomTransform(){
+  const img = $('viewerTrack').querySelector('[data-slot="cur"] img');
+  if(img){
+    img.style.transition = 'transform .15s';
+    img.style.transform = `scale(${viewerState.zoom})`;
+  }
 }
 
 // Tap = toggle preview/original
-let viewerTapTimer = null, viewerLongPressed = false;
+let viewerTapTimer = null, viewerLongPressed = false, tapStartTime = 0;
 $('viewerTrack').addEventListener('click', e => {
   if(viewerState.dragging || viewerLongPressed){ viewerLongPressed = false; return; }
-  // Toggle preview / original
+  if(viewerState.zoom > 1.05) return; // ignore tap while zoomed
   viewerState.view = viewerState.view === 'preview' ? 'original' : 'preview';
-  // Force reload of current slide
-  const cur = $('viewerTrack').querySelector(`.viewer-slide[data-idx="${viewerState.index}"]`);
-  if(cur){ cur.dataset.loadedView = ''; }
-  loadSlide(viewerState.index);
-  updateViewerHeader();
+  renderViewerSlide();
+  updateViewerUI();
 });
 
-// Long-press in viewer = open card actions
+// Long-press = open card actions
 $('viewerTrack').addEventListener('touchstart', e => {
   viewerLongPressed = false;
-  viewerTapTimer = setTimeout(() => {
-    viewerLongPressed = true;
-    if(navigator.vibrate) navigator.vibrate(10);
-    const id = viewerState.ids[viewerState.index];
-    if(id) openCardActions(id);
-  }, 500);
+  if(e.touches.length === 1){
+    viewerTapTimer = setTimeout(() => {
+      viewerLongPressed = true;
+      if(navigator.vibrate) navigator.vibrate(10);
+      const id = viewerState.ids[viewerState.index];
+      if(id) openCardActions(id);
+    }, 500);
+  } else {
+    clearTimeout(viewerTapTimer);
+  }
 }, {passive:true});
 $('viewerTrack').addEventListener('touchend', () => clearTimeout(viewerTapTimer));
 $('viewerTrack').addEventListener('touchcancel', () => clearTimeout(viewerTapTimer));
 
-// Swipe handling
-let swipeStartX = 0, swipeStartY = 0, swipeDX = 0, swipeDY = 0, swipeAxis = null;
+// Swipe + pinch handling
 $('viewerTrack').addEventListener('touchstart', e => {
-  if(!e.touches[0]) return;
-  swipeStartX = e.touches[0].clientX;
-  swipeStartY = e.touches[0].clientY;
-  swipeDX = swipeDY = 0;
-  swipeAxis = null;
-  viewerState.dragging = false;
+  if(e.touches.length === 2){
+    // Pinch start
+    viewerState.pinching = true;
+    viewerState.startDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    viewerState.startZoom = viewerState.zoom;
+    clearTimeout(viewerTapTimer);
+  } else if(e.touches.length === 1 && !viewerState.pinching){
+    viewerState.startX = e.touches[0].clientX;
+    viewerState.startY = e.touches[0].clientY;
+    viewerState.dragging = false;
+    viewerState.axis = null;
+  }
 }, {passive:true});
 
 $('viewerTrack').addEventListener('touchmove', e => {
-  if(!e.touches[0]) return;
-  swipeDX = e.touches[0].clientX - swipeStartX;
-  swipeDY = e.touches[0].clientY - swipeStartY;
-  if(!swipeAxis && (Math.abs(swipeDX) > 8 || Math.abs(swipeDY) > 8)){
-    swipeAxis = Math.abs(swipeDX) > Math.abs(swipeDY) ? 'x' : 'y';
+  if(e.touches.length === 2 && viewerState.pinching){
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    let z = viewerState.startZoom * (d / viewerState.startDist);
+    z = Math.max(1, Math.min(4, z));
+    viewerState.zoom = z;
+    applyZoomTransform();
+    clearTimeout(viewerTapTimer);
+    return;
   }
-  if(swipeAxis === 'x'){
+  if(viewerState.pinching) return;
+  if(viewerState.zoom > 1.05) return; // when zoomed, don't pan-swipe
+  if(!e.touches[0]) return;
+  const dx = e.touches[0].clientX - viewerState.startX;
+  const dy = e.touches[0].clientY - viewerState.startY;
+  if(!viewerState.axis && (Math.abs(dx) > 8 || Math.abs(dy) > 8)){
+    viewerState.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+  }
+  if(viewerState.axis === 'x'){
     clearTimeout(viewerTapTimer);
     viewerState.dragging = true;
     const w = window.innerWidth;
-    const offset = -viewerState.index * 100 + (swipeDX / w) * 100;
-    $('viewerTrack').style.transition = 'none';
-    $('viewerTrack').style.transform = `translateX(${offset}%)`;
+    const pct = (dx / w) * 100;
+    const slides = $('viewerTrack').querySelectorAll('.viewer-slide');
+    slides.forEach(s => {
+      const slot = s.dataset.slot;
+      s.style.transition = 'none';
+      let base = 0;
+      if(slot === 'prev') base = -100;
+      else if(slot === 'next') base = 100;
+      s.style.transform = `translateX(${base + pct}%)`;
+    });
   }
 }, {passive:true});
 
 $('viewerTrack').addEventListener('touchend', e => {
-  if(swipeAxis === 'x' && Math.abs(swipeDX) > 50){
-    if(swipeDX < 0) gotoSlide(viewerState.index + 1);
-    else gotoSlide(viewerState.index - 1);
-  } else if(swipeAxis === 'y' && swipeDY > 100){
+  if(viewerState.pinching){
+    if(e.touches.length < 2){ viewerState.pinching = false; }
+    return;
+  }
+  const dx = (e.changedTouches[0]?.clientX || 0) - viewerState.startX;
+  const dy = (e.changedTouches[0]?.clientY || 0) - viewerState.startY;
+  if(viewerState.axis === 'x' && Math.abs(dx) > 60){
+    gotoSlide(dx < 0 ? 1 : -1);
+  } else if(viewerState.axis === 'y' && dy > 100){
     closeViewer();
   } else {
-    positionTrack(true);
+    positionSlots(true);
   }
+  viewerState.axis = null;
   setTimeout(() => { viewerState.dragging = false; }, 50);
 }, {passive:true});
 
@@ -1530,26 +1760,21 @@ $('viewerShirt').onclick = async () => {
   const id = viewerState.ids[viewerState.index];
   if(!id) return;
   await cycleShirt(id);
-  // Force re-render of this slide
-  const slide = $('viewerTrack').querySelector(`.viewer-slide[data-idx="${viewerState.index}"]`);
-  if(slide) slide.dataset.loadedView = '';
-  loadSlide(viewerState.index);
+  renderViewerSlide();
 };
 
 async function viewerSetStatus(status){
   const id = viewerState.ids[viewerState.index];
   if(!id) return;
   await setStatus(id, status);
-  updateViewerActions();
-  // If filter changed and id is gone, advance or close
+  updateViewerUI();
   const stillIn = getFilteredIds();
   if(!stillIn.includes(id)){
-    // Update viewer ids list, advance or close
     viewerState.ids = stillIn;
     if(viewerState.ids.length === 0){ closeViewer(); return; }
     if(viewerState.index >= viewerState.ids.length) viewerState.index = viewerState.ids.length - 1;
-    buildViewerSlides();
-    updateViewerActions();
+    renderViewerSlide();
+    updateViewerUI();
   }
 }
 $('vaKeep').onclick = () => viewerSetStatus('round1');
@@ -1574,6 +1799,7 @@ window.addEventListener('pageshow', e => {
       if(!('aspectRatio' in d)) d.aspectRatio = 1;
       if(!('sizeOverride' in d)) d.sizeOverride = null;
       if(!('vOffsetOverride' in d)) d.vOffsetOverride = 0;
+      if(!('exportedAt' in d)) d.exportedAt = null;
     });
   } catch(e){
     console.error('db load failed', e);
