@@ -643,7 +643,7 @@ function findContentBBox(imageData){
 
 // Composite cache
 const compositeCache = new Map();
-const CACHE_LIMIT = 100;
+const CACHE_LIMIT = 250;
 function cacheKey(d, settings, outputW){
   return [d.id, d.shirtOverride||'', d.sizeOverride||'', d.vOffsetOverride||0,
           d.side||'front', settings.shirtMode, settings.size, settings.knockout, outputW].join('|');
@@ -833,20 +833,30 @@ function renderGrid(){
   }
   main.innerHTML = `<div class="grid cols-${state.gridCols}">${filtered.map(cardHtml).join('')}</div>`;
   ensureCardObserver();
-  // Visible-row count: enough to fill screen at current density
-  const visibleCount = state.gridCols * 6;  // ~6 rows worth
+  const visibleCount = state.gridCols * 6;
+  const outputW = state.gridCols === 1 ? 900 : state.gridCols === 2 ? 600 : 460;
+  // PHASE 1: cached cards render instantly. Uncached deferred to next tick so
+  // cache-hit cards paint first instead of getting starved by slow composites.
+  const visibleNeedingCompose = [];
   filtered.forEach((d, i) => {
     const el = document.querySelector(`.card[data-id="${d.id}"]`);
     if(!el) return;
     attachCardHandlers(d.id);
     if(i < visibleCount){
-      // Render top of grid immediately (don't wait for observer)
       el.dataset.rendered = '1';
-      renderCardComposite(d.id);
+      const ck = cacheKey(d, state.settings, outputW);
+      if(compositeCache.has(ck)){
+        renderCardComposite(d.id);
+      } else {
+        visibleNeedingCompose.push(d.id);
+      }
     } else {
       _cardObserver.observe(el);
     }
   });
+  setTimeout(() => {
+    visibleNeedingCompose.forEach(id => renderCardComposite(id));
+  }, 16);
 }
 
 function cardHtml(d){
@@ -1140,6 +1150,13 @@ $('resetShirt').onclick = async () => {
   updateCardShirtBadgeInPlace(d);
   renderCardComposite(d.id);
 };
+function refreshCardActionsSub(){
+  const d = state.designs.find(x => x.id === state.actionsId);
+  if(!d) return;
+  const sideLabel = (d.side || 'front') === 'back' ? 'Back' : 'Front';
+  $('cardActionsSub').textContent = `${sideLabel} \u00b7 ${ZONES_FRONT[resolvedSize(d, state.settings)]?.label || ''} \u00b7 ${d.shirtOverride || (state.settings.shirtMode==='auto' ? d.resolvedShirt : state.settings.shirtMode)}`;
+}
+
 document.querySelectorAll('#cardSideSeg button').forEach(b => {
   b.addEventListener('click', async e => {
     e.stopPropagation();
@@ -1150,6 +1167,7 @@ document.querySelectorAll('#cardSideSeg button').forEach(b => {
     await persistDesign(d);
     document.querySelectorAll('#cardSideSeg button').forEach(x => x.classList.toggle('on', x.dataset.v === d.side));
     updateCardShirtBadgeInPlace(d);
+    refreshCardActionsSub();
     renderCardComposite(d.id);
   });
 });
@@ -1581,14 +1599,24 @@ let viewerState = {
 
 function getFilteredIds(){ return getFiltered().map(d => d.id); }
 
+// Find the grid card's currently rendered img src - used as fast fallback so viewer never shows blank
+function getCardFallbackSrc(id){
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if(!card) return '';
+  const img = card.querySelector('img');
+  return img && img.src ? img.src : '';
+}
+
 function openViewer(startId){
   viewerState.ids = getFilteredIds();
+  if(viewerState.ids.length === 0) return;
   viewerState.index = Math.max(0, viewerState.ids.indexOf(startId));
   viewerState.view = 'preview';
   viewerState.zoom = 1;
-  // Build single slide container ONCE; we just swap its content
   const track = $('viewerTrack');
   track.innerHTML = '<div class="viewer-slide current" id="vSlide"><img id="vImg" alt=""><div class="skel" id="vSkel"></div></div>';
+  const fallback = getCardFallbackSrc(startId);
+  if(fallback) $('vImg').src = fallback;
   $('viewer').classList.add('open');
   loadCurrent();
   updateViewerUI();
@@ -1655,7 +1683,6 @@ function updateViewerUI(){
 function gotoSlide(direction){
   const newIdx = viewerState.index + direction;
   if(newIdx < 0 || newIdx >= viewerState.ids.length){
-    // Bounce back animation
     const slide = $('vSlide');
     if(slide){
       slide.style.transition = 'transform .25s';
@@ -1666,16 +1693,21 @@ function gotoSlide(direction){
   }
   viewerState.index = newIdx;
   viewerState.zoom = 1;
-  // Simple fade: dim slightly, swap, fade back in
+  const img = $('vImg');
+  if(img){
+    img.style.transition = 'none';
+    img.style.transform = 'scale(1)';
+  }
+  const nextId = viewerState.ids[newIdx];
+  const fallback = getCardFallbackSrc(nextId);
+  if(fallback && img) img.src = fallback;
   const slide = $('vSlide');
   if(slide){
-    slide.style.transition = 'transform .2s, opacity .15s';
+    slide.style.transition = 'transform .2s';
     slide.style.transform = `translateX(${-direction * 20}px)`;
-    slide.style.opacity = '0.5';
     setTimeout(() => {
       slide.style.transform = 'translateX(0)';
-      slide.style.opacity = '1';
-    }, 150);
+    }, 30);
   }
   loadCurrent();
   updateViewerUI();
@@ -1785,11 +1817,16 @@ vTrack.addEventListener('touchcancel', () => {
 
 // Tap = toggle preview / original
 vTrack.addEventListener('click', e => {
-  if(vDragging || vLongPressed){
+  if(vDragging || vLongPressed || vSwipeAxis !== null){
     vLongPressed = false;
+    vSwipeAxis = null;
     return;
   }
-  if(viewerState.zoom > 1.05) return;
+  if(viewerState.zoom > 1.05){
+    viewerState.zoom = 1;
+    applyZoom();
+    return;
+  }
   viewerState.view = viewerState.view === 'preview' ? 'original' : 'preview';
   loadCurrent();
   updateViewerUI();
