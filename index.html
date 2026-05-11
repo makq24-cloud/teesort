@@ -747,7 +747,7 @@ function shirtBadgeText(d){
 }
 
 function isEdited(d){
-  return !!(d.shirtOverride || d.sizeOverride || d.vOffsetOverride);
+  return !!(d.shirtOverride || d.sizeOverride || d.vOffsetOverride || d.knockoutOverride != null);
 }
 
 async function persistDesign(d){
