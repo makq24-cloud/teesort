@@ -55,7 +55,7 @@
   .grid.cols-3 .badge.status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
   .card{position:relative;background:#111114;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
   .card.edited{border-color:rgba(255,255,255,.18)}
-  .card-preview{position:relative;width:100%;aspect-ratio:4/5;display:block;cursor:pointer;user-select:none;-webkit-user-select:none}
+  .card-preview{position:relative;width:100%;aspect-ratio:1/1;display:block;cursor:pointer;user-select:none;-webkit-user-select:none}
   .card-preview canvas,.card-preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
   .card-skeleton{position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.08),rgba(255,255,255,.04));background-size:200% 100%;animation:shimmer 1.4s infinite}
   @keyframes shimmer{to{background-position:-200% 0}}
@@ -589,16 +589,16 @@ const STATUS_LABELS = {inbox:'New', round1:'Keep', needs_fixing:'Fix', rejected:
 // 15x18 sized to feel like an oversized chest print (the user's default)
 // Full bounded to torso width only (no shoulder/sleeve bleed)
 const ZONES_FRONT = {
-  '15x18':      {maxW:0.420, maxH:0.460, topY:0.215, centerX:0.500, label:'15\u00d718'},
-  '12x16':      {maxW:0.340, maxH:0.380, topY:0.225, centerX:0.500, label:'12\u00d716'},
-  'horizontal': {maxW:0.420, maxH:0.140, topY:0.300, centerX:0.500, label:'Horizontal'},
-  'full':       {maxW:0.480, maxH:0.560, topY:0.200, centerX:0.500, label:'Full front'}
+  '15x18':      {maxW:0.420, maxH:0.460, topY:0.190, centerX:0.500, label:'15\u00d718'},
+  '12x16':      {maxW:0.340, maxH:0.380, topY:0.200, centerX:0.500, label:'12\u00d716'},
+  'horizontal': {maxW:0.420, maxH:0.140, topY:0.275, centerX:0.500, label:'Horizontal'},
+  'full':       {maxW:0.440, maxH:0.520, topY:0.172, centerX:0.500, label:'Full front'}
 };
 const ZONES_BACK = {
-  '15x18':      {maxW:0.380, maxH:0.460, topY:0.200, centerX:0.485, label:'15\u00d718'},
-  '12x16':      {maxW:0.310, maxH:0.380, topY:0.210, centerX:0.485, label:'12\u00d716'},
-  'horizontal': {maxW:0.360, maxH:0.130, topY:0.280, centerX:0.485, label:'Horizontal'},
-  'full':       {maxW:0.420, maxH:0.520, topY:0.190, centerX:0.485, label:'Full back'}
+  '15x18':      {maxW:0.380, maxH:0.460, topY:0.178, centerX:0.500, label:'15\u00d718'},
+  '12x16':      {maxW:0.310, maxH:0.380, topY:0.188, centerX:0.500, label:'12\u00d716'},
+  'horizontal': {maxW:0.360, maxH:0.130, topY:0.255, centerX:0.500, label:'Horizontal'},
+  'full':       {maxW:0.390, maxH:0.480, topY:0.165, centerX:0.500, label:'Full back'}
 };
 const ZONES = ZONES_FRONT; // for backward compat references
 function getZones(side){ return side === 'back' ? ZONES_BACK : ZONES_FRONT; }
@@ -622,6 +622,14 @@ try {
     if(!['auto','12x16','15x18','full'].includes(state.settings.size)) state.settings.size = 'auto';
     if(state.settings.knockout > 60) state.settings.knockout = 30;
     delete state.settings.vOffset;  // removed from global
+  }
+  // v12 one-time: correct the global size setting to 15x18 (older builds left it stuck on Full)
+  if(!localStorage.getItem('teesort_sizefix_v12')){
+    state.settings.size = '15x18';
+    try {
+      localStorage.setItem('teesort_sizefix_v12', '1');
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+    } catch(e){}
   }
   const v = parseInt(localStorage.getItem(VIEW_KEY)||'3',10);
   if(v===1||v===2||v===3) state.gridCols = v;
@@ -819,7 +827,13 @@ async function composite(d, settings, outputW){
   ctx.drawImage(gC, bbox.x, bbox.y, bbox.w, bbox.h, drawX, drawY, drawW, drawH);
   ctx.globalAlpha = 1.0;
 
-  const dataURL = canvas.toDataURL('image/jpeg', 0.86);
+  // Crop tighter to the shirt: trim 3% off top, 17% off bottom (pants). Output ~square.
+  const cropTop = Math.round(H * 0.03);
+  const cropH = Math.round(H * 0.80);
+  const outC = document.createElement('canvas');
+  outC.width = W; outC.height = cropH;
+  outC.getContext('2d').drawImage(canvas, 0, cropTop, W, cropH, 0, 0, W, cropH);
+  const dataURL = outC.toDataURL('image/jpeg', 0.86);
   if(compositeCache.size >= CACHE_LIMIT) compositeCache.delete(compositeCache.keys().next().value);
   compositeCache.set(key, dataURL);
   d._lastZone = zoneKey;
@@ -1337,6 +1351,20 @@ document.querySelectorAll('#cardSideSeg button').forEach(b => {
     document.querySelectorAll('#cardSideSeg button').forEach(x => x.classList.toggle('on', x.dataset.v === d.side));
     updateCardShirtBadgeInPlace(d);
     refreshCardActionsSub();
+    // Force clean re-render: drop the stale image, show skeleton, re-composite
+    const card = document.querySelector(`.card[data-id="${d.id}"]`);
+    if(card){
+      const wrap = card.querySelector('.card-preview');
+      if(wrap){
+        wrap.querySelectorAll('img').forEach(x => x.remove());
+        if(!wrap.querySelector('.card-skeleton')){
+          const sk = document.createElement('div');
+          sk.className = 'card-skeleton';
+          wrap.appendChild(sk);
+        }
+        card.dataset.rendered = '';
+      }
+    }
     renderCardComposite(d.id);
     refreshViewerIfShowing(d.id);
   });
