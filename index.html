@@ -855,9 +855,9 @@ async function composite(d, settings, outputW){
   ctx.drawImage(gC, bbox.x, bbox.y, bbox.w, bbox.h, drawX, drawY, drawW, drawH);
   ctx.globalAlpha = 1.0;
 
-  // Crop tighter to the shirt: trim 3% off top, 17% off bottom (pants). Output ~square.
-  const cropTop = Math.round(H * 0.03);
-  const cropH = Math.round(H * 0.80);
+  // v14.3 tighter crop - more shirt/graphic, less head+pants
+  const cropTop = Math.round(H * 0.08);
+  const cropH = Math.round(H * 0.66);
   const outC = document.createElement('canvas');
   outC.width = W; outC.height = cropH;
   outC.getContext('2d').drawImage(canvas, 0, cropTop, W, cropH, 0, 0, W, cropH);
