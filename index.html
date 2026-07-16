@@ -348,6 +348,10 @@
       <button class="ghost" id="finExportInfo">Finalist file info audit</button>
       <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;line-height:1.4">Downloads split into numbered ZIPs (Finalists_001.zip, 002...) so iOS can save each. Each ZIP contains a manifest.csv with filenames, dimensions, status.</div>
 
+      <h3 style="margin-top:16px">Rebuild previews</h3>
+      <button class="ghost" id="rebuildPreviews">Rebuild all tee previews</button>
+      <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;line-height:1.4">Force TeeSort to regenerate all shirt previews with the latest crop/placement.</div>
+
       <h3 style="margin-top:16px">Cleanup &amp; export (Keeps)</h3>
       <button class="ghost" id="archiveRejected" style="margin-top:0">Archive all rejected designs</button>
       <button class="ghost" id="exportKeeps">Export Keeps (originals, share sheet)</button>
@@ -2455,6 +2459,14 @@ document.getElementById('finInfoClose').onclick = () => document.getElementById(
 document.getElementById('finExportZipOriginals').onclick = () => exportFinalistZip('original');
 document.getElementById('finExportZipTees').onclick = () => exportFinalistZip('tee');
 document.getElementById('finExportInfo').onclick = showFinalistAudit;
+
+// Rebuild previews button
+document.getElementById('rebuildPreviews').onclick = () => {
+  invalidateCache();
+  closeSettings();
+  showToast('Previews cleared. Rebuilding as you scroll.');
+  renderGrid();
+};
 
 // v14 finalist migration
 if(state.designs){ state.designs.forEach(d => { if(d.finalist === undefined) d.finalist = false; }); }
