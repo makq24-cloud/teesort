@@ -491,6 +491,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
     <div class="center" id="viewerLabel">Preview</div>
+    <button class="icon-btn" id="viewerShare" aria-label="Save image">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12l-4 4m4-4 4 4M5 21h14"/></svg>
+    </button>
     <button class="icon-btn" id="viewerShirt" aria-label="Toggle shirt color">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>
     </button>
@@ -855,9 +858,9 @@ async function composite(d, settings, outputW){
   ctx.drawImage(gC, bbox.x, bbox.y, bbox.w, bbox.h, drawX, drawY, drawW, drawH);
   ctx.globalAlpha = 1.0;
 
-  // v14.3 tighter crop - more shirt/graphic, less head+pants
-  const cropTop = Math.round(H * 0.08);
-  const cropH = Math.round(H * 0.66);
+  // v14.4 even tighter - as close as reasonable while keeping shoulder-to-hem in frame
+  const cropTop = Math.round(H * 0.10);
+  const cropH = Math.round(H * 0.60);
   const outC = document.createElement('canvas');
   outC.width = W; outC.height = cropH;
   outC.getContext('2d').drawImage(canvas, 0, cropTop, W, cropH, 0, 0, W, cropH);
@@ -2012,7 +2015,9 @@ function openViewer(startId){
   if(viewerState.ids.length === 0) return;
   viewerState.index = Math.max(0, viewerState.ids.indexOf(startId));
   viewerState.view = 'preview';
-  viewerState.zoom = 1;
+  viewerState.zoom = 1.3;
+  viewerState.panX = 0;
+  viewerState.panY = 0;
   const track = $('viewerTrack');
   track.innerHTML = '<div class="viewer-slide current" id="vSlide"><img id="vImg" alt=""><div class="skel" id="vSkel"></div></div>';
   const fallback = getCardFallbackSrc(startId);
@@ -2020,6 +2025,7 @@ function openViewer(startId){
   $('viewer').classList.add('open');
   loadCurrent();
   updateViewerUI();
+  requestAnimationFrame(() => applyZoom(false));
 }
 
 function closeViewer(){
@@ -2252,6 +2258,55 @@ vTrack.addEventListener('click', e => {
 
 // Buttons
 $('viewerClose').onclick = closeViewer;
+async function _shareViewerItem(kind){
+  const id = viewerState.ids[viewerState.index];
+  if(!id) return;
+  const d = state.designs.find(x => x.id === id);
+  if(!d) return;
+  try {
+    if(kind === 'tee'){
+      // Tee mockup
+      const dataUrl = await composite(d, state.settings, 1600);
+      const resp = await fetch(dataUrl);
+      const blob = await resp.blob();
+      const safe = (d.name || 'design').replace(/\.(jpg|jpeg|png|webp|heic)$/i,'').replace(/[^\w.\- ]+/g,'_').slice(0,80);
+      const file = new File([blob], `${safe}_tee.jpg`, {type:'image/jpeg'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file]});
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = file.name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } else {
+      if(!d.blob){ showToast('Original not available'); return; }
+      const ext = ((d.blob.type||'image/png').split('/')[1] || 'png').replace('jpeg','jpg');
+      const safe = (d.name || 'design').replace(/\.(jpg|jpeg|png|webp|heic)$/i,'').replace(/[^\w.\- ]+/g,'_').slice(0,80);
+      const file = new File([d.blob], `${safe}.${ext}`, {type: d.blob.type || 'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file]});
+      } else {
+        const url = URL.createObjectURL(d.blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = file.name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    }
+  } catch(e){
+    if(e.name !== 'AbortError') console.error('share err', e);
+  }
+}
+$('viewerShare').onclick = () => {
+  document.getElementById('shareSheet').classList.add('open');
+  document.getElementById('shareSheetBg').classList.add('open');
+};
+function _closeShareSheet(){
+  document.getElementById('shareSheet').classList.remove('open');
+  document.getElementById('shareSheetBg').classList.remove('open');
+}
 $('viewerShirt').onclick = async () => {
   const id = viewerState.ids[viewerState.index];
   if(!id) return;
@@ -2468,10 +2523,33 @@ document.getElementById('rebuildPreviews').onclick = () => {
   renderGrid();
 };
 
+// v14.4 share sheet buttons
+document.getElementById('shareOriginal').onclick = async () => {
+  _closeShareSheet();
+  await _shareViewerItem('original');
+};
+document.getElementById('shareTee').onclick = async () => {
+  _closeShareSheet();
+  await _shareViewerItem('tee');
+};
+
 // v14 finalist migration
 if(state.designs){ state.designs.forEach(d => { if(d.finalist === undefined) d.finalist = false; }); }
 
 </script>
+<!-- v14.4 Share sheet -->
+<div class="sheet-bg" id="shareSheetBg" onclick="_closeShareSheet()" style="z-index:64"></div>
+<div class="sheet" id="shareSheet" style="z-index:65">
+  <div class="sheet-handle"></div>
+  <div style="padding:8px 20px 20px">
+    <h2 style="font-size:18px;font-weight:700;margin:8px 0 6px">Save</h2>
+    <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:14px">Save to Photos or send anywhere.</div>
+    <button class="ghost" id="shareOriginal" style="margin-top:0">Save original graphic</button>
+    <button class="ghost" id="shareTee">Save tee mockup preview</button>
+    <button class="ghost" onclick="_closeShareSheet()" style="margin-top:8px;background:transparent">Cancel</button>
+  </div>
+</div>
+
 <!-- v14 Finalist file info audit modal -->
 <div class="info-modal" id="finInfoModal">
   <div class="card">
