@@ -928,7 +928,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.11 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -2130,14 +2130,27 @@ async function loadCurrent(){
   if(!d || !d.blob){ closeViewer(); return; }
   const img = $('vImg');
   const skel = $('vSkel');
-  // Show skeleton overlay but DO NOT clear the existing image yet —
-  // user keeps seeing the previous image until the new one is ready.
+  // Save last-good src so we can restore if the new load fails
+  const lastGood = img && img.src ? img.src : '';
+  // If the current img has NO src, immediately fall back to grid card img
+  if(img && !img.src){
+    const fb = getCardFallbackSrc(id);
+    if(fb) img.src = fb;
+  }
   if(skel) skel.style.display = 'block';
+  const failSafe = () => {
+    if(skel) skel.style.display = 'none';
+    // If we ended up with no src, put back the last-good or grid fallback
+    if(img && !img.src){
+      const fb = lastGood || getCardFallbackSrc(id);
+      if(fb) img.src = fb;
+    }
+  };
   try {
     let url;
     if(viewerState.view === 'original'){
       const bm = await blobToBitmap(d.blob, 1400);
-      if(token !== viewerState.loadToken) return; // stale
+      if(token !== viewerState.loadToken){ failSafe(); return; }
       const c = document.createElement('canvas');
       c.width = bm.width; c.height = bm.height;
       c.getContext('2d').drawImage(bm, 0, 0);
@@ -2146,20 +2159,23 @@ async function loadCurrent(){
     } else {
       url = await composite(d, state.settings, 1100);
     }
-    if(token !== viewerState.loadToken) return; // stale - user already moved on
-    // Preload to avoid flash: only swap src once new image is loaded
+    if(token !== viewerState.loadToken){ failSafe(); return; }
+    if(!url){ failSafe(); return; }
     const pre = new Image();
     pre.onload = () => {
-      if(token !== viewerState.loadToken) return;
+      if(token !== viewerState.loadToken){ failSafe(); return; }
       img.src = pre.src;
-      img.style.transform = `scale(${viewerState.zoom})`;
+      // Preserve pan if any; always include translate3d so state matches applyZoom
+      const tx = viewerState.panX || 0;
+      const ty = viewerState.panY || 0;
+      img.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${viewerState.zoom || 1})`;
       if(skel) skel.style.display = 'none';
     };
-    pre.onerror = () => { if(skel) skel.style.display = 'none'; };
+    pre.onerror = () => { failSafe(); };
     pre.src = url;
   } catch(e){
     console.error('viewer load', e);
-    if(skel) skel.style.display = 'none';
+    failSafe();
   }
 }
 
