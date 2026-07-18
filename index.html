@@ -185,7 +185,7 @@
   .viewer-head{position:absolute;top:0;left:0;right:0;padding:env(safe-area-inset-top) 12px 8px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:5;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);pointer-events:none}
   .viewer-head .icon-btn{pointer-events:auto;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);touch-action:manipulation}
   .viewer-head .center{flex:1;text-align:center;color:rgba(255,255,255,.85);font-size:12px;font-weight:500;pointer-events:none}
-  .viewer-track{flex:1;display:flex;align-items:center;justify-content:center;width:100%;overflow:hidden;position:relative}
+  .viewer-track{flex:1;display:flex;align-items:center;justify-content:center;width:100%;overflow:hidden;position:relative;touch-action:none;-webkit-user-select:none;user-select:none}
   .viewer-slide{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;will-change:transform,opacity}
   .viewer-slide img{max-width:100%;max-height:100%;object-fit:contain;display:block;-webkit-user-drag:none;user-select:none;-webkit-user-select:none;transform-origin:center}
   .viewer-slide .skel{position:absolute;inset:30% 25%;border-radius:14px;background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.08),rgba(255,255,255,.04));background-size:200% 100%;animation:shimmer 1.4s infinite;pointer-events:none}
@@ -511,6 +511,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
     <div class="center" id="viewerLabel">Preview</div>
+    <button class="icon-btn" id="viewerSizeBtn" aria-label="Toggle size" style="min-width:auto;padding:0 10px;font-size:11px;font-weight:700;letter-spacing:.02em">
+      <span id="viewerSizeBtnLabel">15×18</span>
+    </button>
     <button class="icon-btn" id="viewerShare" aria-label="Save image">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12l-4 4m4-4 4 4M5 21h14"/></svg>
     </button>
@@ -2100,7 +2103,7 @@ function openViewer(startId){
   if(viewerState.ids.length === 0) return;
   viewerState.index = Math.max(0, viewerState.ids.indexOf(startId));
   viewerState.view = 'preview';
-  viewerState.zoom = 1.3;
+  viewerState.zoom = 1;
   viewerState.panX = 0;
   viewerState.panY = 0;
   const track = $('viewerTrack');
@@ -2166,6 +2169,12 @@ function updateViewerUI(){
   if(!d){ closeViewer(); return; }
   $('viewerPos').textContent = `${viewerState.index + 1} / ${viewerState.ids.length}`;
   $('viewerLabel').textContent = viewerState.view === 'original' ? 'Original' : (d.name || 'Preview');
+  // v14.10: keep viewer size button label in sync with current design
+  const _szBtn = document.getElementById('viewerSizeBtnLabel');
+  if(_szBtn){
+    const eff = resolvedSize(d, state.settings);
+    _szBtn.textContent = (eff === '12x16') ? '12\u00d716' : '15\u00d718';
+  }
   $('vaKeep').classList.toggle('on', d.status === 'round1');
   $('vaFix').classList.toggle('on', d.status === 'needs_fixing');
   $('vaReject').classList.toggle('on', d.status === 'rejected');
@@ -2402,6 +2411,41 @@ function showFallbackImagePreview(url, filename){
     <img src="${url}" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:8px;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto">
     <button style="margin-top:16px;padding:12px 24px;border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-weight:600;border:0" onclick="document.getElementById('imgFallback').remove()">Done</button>`;
 }
+document.getElementById('viewerSizeBtn').onclick = async () => {
+  const id = viewerState.ids[viewerState.index];
+  if(!id) return;
+  const d = state.designs.find(x => x.id === id);
+  if(!d) return;
+  const cur = resolvedSize(d, state.settings);
+  const next = (cur === '12x16') ? '15x18' : '12x16';
+  d.sizeOverride = next;
+  invalidateCache(d.id);
+  await persistDesign(d);
+  const lbl = document.getElementById('viewerSizeBtnLabel');
+  if(lbl) lbl.textContent = (next === '12x16') ? '12\u00d716' : '15\u00d718';
+  updateCardShirtBadgeInPlace(d);
+  // Force-clean re-render on the underlying grid card
+  const card = document.querySelector(`.card[data-id="${d.id}"]`);
+  if(card){
+    const wrap = card.querySelector('.card-preview');
+    if(wrap){
+      wrap.querySelectorAll('img').forEach(x => x.remove());
+      if(!wrap.querySelector('.card-skeleton')){
+        const sk = document.createElement('div');
+        sk.className = 'card-skeleton';
+        wrap.appendChild(sk);
+      }
+      card.dataset.rendered = '';
+    }
+  }
+  renderCardComposite(d.id);
+  // Also refresh the viewer image
+  if(typeof loadCurrent === 'function') loadCurrent();
+  // Update per-card pill label (matches grid pill)
+  const gridPillLabel = document.querySelector(`.card[data-id="${d.id}"] .card-size-pill .cs-label`);
+  if(gridPillLabel) gridPillLabel.textContent = (next === '12x16') ? '12\u00d716' : '15\u00d718';
+  if(navigator.vibrate) navigator.vibrate(6);
+};
 $('viewerShare').onclick = () => {
   document.getElementById('shareSheet').classList.add('open');
   document.getElementById('shareSheetBg').classList.add('open');
