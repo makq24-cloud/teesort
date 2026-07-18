@@ -378,7 +378,7 @@
       <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;line-height:1.4">Downloads split into numbered ZIPs (Finalists_001.zip, 002...) so iOS can save each. Each ZIP contains a manifest.csv with filenames, dimensions, status.</div>
 
       <h3 style="margin-top:16px">Update / troubleshoot</h3>
-      <button class="ghost" id="forceRefresh" style="margin-top:0">Force reload app (bust cache)</button>
+      <button class="ghost" id="forceRefresh" style="margin-top:0" onclick="(function(){try{if('caches' in window){caches.keys().then(function(ns){ns.forEach(function(n){caches.delete(n);});});}if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});}}catch(e){}var u=new URL(window.location.href);u.searchParams.set('v',Date.now());window.location.replace(u.toString());})()">Force reload app (bust cache)</button>
       <div style="font-size:11px;color:rgba(255,255,255,.45);margin:6px 0 12px;line-height:1.4">If TeeSort is showing an old version, tap this. On PWA installs, you may still need to delete + re-add the Home Screen icon.</div>
       <button class="ghost" id="rebuildPreviews">Rebuild all tee previews</button>
       <button class="ghost" id="clearSizeOverrides">Clear per-card size overrides</button>
@@ -2764,23 +2764,7 @@ document.getElementById('finExportZipTees').onclick = () => exportFinalistZip('t
 document.getElementById('finExportInfo').onclick = showFinalistAudit;
 
 // Rebuild previews button
-document.getElementById('forceRefresh').onclick = async () => {
-  // Try to unregister any service workers first
-  try {
-    if('serviceWorker' in navigator){
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for(const r of regs) await r.unregister();
-    }
-    if('caches' in window){
-      const names = await caches.keys();
-      for(const n of names) await caches.delete(n);
-    }
-  } catch(e){ console.warn('cache clear err', e); }
-  // Hard reload with cache-bust query
-  const u = new URL(window.location.href);
-  u.searchParams.set('v', Date.now());
-  window.location.replace(u.toString());
-};
+// Force reload handled by inline onclick on the button (bulletproof against script errors)
 document.getElementById('rebuildPreviews').onclick = () => {
   invalidateCache();
   closeSettings();
