@@ -193,6 +193,17 @@
   .viewer-foot > *{pointer-events:auto}
   .viewer-foot button{pointer-events:auto;touch-action:manipulation}
   .viewer-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;max-width:340px;margin:0 auto}
+  /* v14.13: floating viewer size pill - bottom-right, ABOVE the action row, out of safari toolbar path */
+  .viewer-size-pill{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom) + 90px);z-index:6;
+    height:38px;min-width:88px;padding:0 14px;border-radius:19px;
+    background:rgba(20,20,22,.94);color:#fff;font-size:13px;font-weight:700;
+    display:inline-flex;align-items:center;gap:6px;
+    border:1px solid rgba(255,255,255,.18);box-shadow:0 4px 16px rgba(0,0,0,.5);
+    -webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;
+    touch-action:manipulation;cursor:pointer;
+    transition:transform .1s,background .15s}
+  .viewer-size-pill:active{transform:scale(.93);background:#fff;color:#111}
+  .viewer-size-pill svg{width:12px;height:12px;opacity:.55}
   /* v14.9 per-card size pill: bottom-right of each grid card, thumb reach */
   .card-size-pill{position:absolute;bottom:8px;right:8px;z-index:5;
     height:28px;padding:0 12px;border-radius:14px;
@@ -366,7 +377,9 @@
       <button class="ghost" id="finExportInfo">Finalist file info audit</button>
       <div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;line-height:1.4">Downloads split into numbered ZIPs (Finalists_001.zip, 002...) so iOS can save each. Each ZIP contains a manifest.csv with filenames, dimensions, status.</div>
 
-      <h3 style="margin-top:16px">Rebuild previews</h3>
+      <h3 style="margin-top:16px">Update / troubleshoot</h3>
+      <button class="ghost" id="forceRefresh" style="margin-top:0">Force reload app (bust cache)</button>
+      <div style="font-size:11px;color:rgba(255,255,255,.45);margin:6px 0 12px;line-height:1.4">If TeeSort is showing an old version, tap this. On PWA installs, you may still need to delete + re-add the Home Screen icon.</div>
       <button class="ghost" id="rebuildPreviews">Rebuild all tee previews</button>
       <button class="ghost" id="clearSizeOverrides">Clear per-card size overrides</button>
       <button class="ghost" id="clearShirtOverrides">Clear per-card shirt overrides</button>
@@ -511,9 +524,6 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
     <div class="center" id="viewerLabel">Preview</div>
-    <button class="icon-btn" id="viewerSizeBtn" aria-label="Toggle size" style="min-width:auto;padding:0 10px;font-size:11px;font-weight:700;letter-spacing:.02em">
-      <span id="viewerSizeBtnLabel">15×18</span>
-    </button>
     <button class="icon-btn" id="viewerShare" aria-label="Save image">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12l-4 4m4-4 4 4M5 21h14"/></svg>
     </button>
@@ -523,6 +533,10 @@
   </div>
   <div class="viewer-pos top" id="viewerPos">1 / 1</div>
   <div class="viewer-track" id="viewerTrack"></div>
+  <button class="viewer-size-pill" id="viewerSizeBtn" aria-label="Toggle size">
+    <span id="viewerSizeBtnLabel">15×18</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M21 7H3M7 21l-4-4 4-4M3 17h18"/></svg>
+  </button>
   <div class="viewer-foot">
     <div class="viewer-hint">Tap = Preview / Original  •  Swipe = next  •  Long-press = options</div>
     <div class="viewer-actions">
@@ -928,7 +942,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `v14.12 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.13 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -1103,17 +1117,8 @@ function attachCardHandlers(id){
       await persistDesign(d);
       const lbl = sizePill.querySelector('.cs-label');
       if(lbl) lbl.textContent = (next === '12x16') ? '12\u00d716' : '15\u00d718';
-      // Force-clean re-render (same pattern as size handler in sheet)
-      const wrap = el.querySelector('.card-preview');
-      if(wrap){
-        wrap.querySelectorAll('img').forEach(x => x.remove());
-        if(!wrap.querySelector('.card-skeleton')){
-          const sk = document.createElement('div');
-          sk.className = 'card-skeleton';
-          wrap.appendChild(sk);
-        }
-        el.dataset.rendered = '';
-      }
+      // v14.13: DON'T force-clean. renderCardComposite swaps img on load.
+      // Force-clean caused the card to go grey because we killed the old img before new one loaded.
       renderCardComposite(id);
       updateCardShirtBadgeInPlace(d);
       if(typeof refreshViewerIfShowing === 'function') refreshViewerIfShowing(id);
@@ -2684,6 +2689,23 @@ document.getElementById('finExportZipTees').onclick = () => exportFinalistZip('t
 document.getElementById('finExportInfo').onclick = showFinalistAudit;
 
 // Rebuild previews button
+document.getElementById('forceRefresh').onclick = async () => {
+  // Try to unregister any service workers first
+  try {
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for(const r of regs) await r.unregister();
+    }
+    if('caches' in window){
+      const names = await caches.keys();
+      for(const n of names) await caches.delete(n);
+    }
+  } catch(e){ console.warn('cache clear err', e); }
+  // Hard reload with cache-bust query
+  const u = new URL(window.location.href);
+  u.searchParams.set('v', Date.now());
+  window.location.replace(u.toString());
+};
 document.getElementById('rebuildPreviews').onclick = () => {
   invalidateCache();
   closeSettings();
