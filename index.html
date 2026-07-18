@@ -928,7 +928,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `v14.11 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.12 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -2437,30 +2437,35 @@ document.getElementById('viewerSizeBtn').onclick = async () => {
   d.sizeOverride = next;
   invalidateCache(d.id);
   await persistDesign(d);
+  // Update UI labels immediately so user sees confirmation
   const lbl = document.getElementById('viewerSizeBtnLabel');
   if(lbl) lbl.textContent = (next === '12x16') ? '12\u00d716' : '15\u00d718';
-  updateCardShirtBadgeInPlace(d);
-  // Force-clean re-render on the underlying grid card
-  const card = document.querySelector(`.card[data-id="${d.id}"]`);
-  if(card){
-    const wrap = card.querySelector('.card-preview');
-    if(wrap){
-      wrap.querySelectorAll('img').forEach(x => x.remove());
-      if(!wrap.querySelector('.card-skeleton')){
-        const sk = document.createElement('div');
-        sk.className = 'card-skeleton';
-        wrap.appendChild(sk);
-      }
-      card.dataset.rendered = '';
-    }
-  }
-  renderCardComposite(d.id);
-  // Also refresh the viewer image
-  if(typeof loadCurrent === 'function') loadCurrent();
-  // Update per-card pill label (matches grid pill)
   const gridPillLabel = document.querySelector(`.card[data-id="${d.id}"] .card-size-pill .cs-label`);
   if(gridPillLabel) gridPillLabel.textContent = (next === '12x16') ? '12\u00d716' : '15\u00d718';
   if(navigator.vibrate) navigator.vibrate(6);
+  // Refresh the viewer composite. DO NOT touch the grid card yet - its img is the
+  // fallback source for the viewer while the new composite generates.
+  if(typeof loadCurrent === 'function') loadCurrent();
+  // Grid card refresh runs AFTER the viewer has swapped to the new composite.
+  // We wait for the loadToken to change indicating the new composite loaded.
+  const startToken = viewerState.loadToken;
+  const waitAndRefreshGrid = () => {
+    // Poll for viewer load completion (up to 6 seconds), then refresh grid card
+    let tries = 0;
+    const tick = () => {
+      tries++;
+      const vImg = document.getElementById('vImg');
+      const loaded = vImg && vImg.src && vImg.complete;
+      if(loaded || tries > 120){
+        updateCardShirtBadgeInPlace(d);
+        renderCardComposite(d.id);
+        return;
+      }
+      setTimeout(tick, 50);
+    };
+    tick();
+  };
+  waitAndRefreshGrid();
 };
 $('viewerShare').onclick = () => {
   document.getElementById('shareSheet').classList.add('open');
