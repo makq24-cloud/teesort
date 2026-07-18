@@ -7,6 +7,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>TeeSort</title>
 <style>
+  /* Global: no text selection, no image callouts, no tap highlights, ANYWHERE */
+  *,*::before,*::after{-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+  html,body{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  img{-webkit-touch-callout:none;-webkit-user-drag:none;pointer-events:auto}
+  /* Explicit exception: only textareas and inputs allow selection (notes field) */
+  textarea,input[type="text"],input[type="search"],input[type="number"]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+
   *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
   html,body{margin:0;padding:0;background:#0a0a0b;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:contain}
   body{min-height:100vh;min-height:100dvh}
@@ -1336,6 +1343,20 @@ document.querySelectorAll('#cardSizeSeg button').forEach(b => {
     document.querySelectorAll('#cardSizeSeg button').forEach(x => x.classList.toggle('on', x.dataset.v === d.sizeOverride));
     updateCardShirtBadgeInPlace(d);
     refreshCardActionsSub();
+    // v14.7: force-clean re-render (matches side handler pattern - fixes stale image)
+    const card = document.querySelector(`.card[data-id="${d.id}"]`);
+    if(card){
+      const wrap = card.querySelector('.card-preview');
+      if(wrap){
+        wrap.querySelectorAll('img').forEach(x => x.remove());
+        if(!wrap.querySelector('.card-skeleton')){
+          const sk = document.createElement('div');
+          sk.className = 'card-skeleton';
+          wrap.appendChild(sk);
+        }
+        card.dataset.rendered = '';
+      }
+    }
     renderCardComposite(d.id);
     refreshViewerIfShowing(d.id);
   };
@@ -1350,6 +1371,20 @@ document.querySelectorAll('#cardShirtSeg button').forEach(b => {
     document.querySelectorAll('#cardShirtSeg button').forEach(x => x.classList.toggle('on', x.dataset.v === d.shirtOverride));
     updateCardShirtBadgeInPlace(d);
     refreshCardActionsSub();
+    // v14.7: force-clean re-render
+    const cardS = document.querySelector(`.card[data-id="${d.id}"]`);
+    if(cardS){
+      const wrapS = cardS.querySelector('.card-preview');
+      if(wrapS){
+        wrapS.querySelectorAll('img').forEach(x => x.remove());
+        if(!wrapS.querySelector('.card-skeleton')){
+          const skS = document.createElement('div');
+          skS.className = 'card-skeleton';
+          wrapS.appendChild(skS);
+        }
+        cardS.dataset.rendered = '';
+      }
+    }
     renderCardComposite(d.id);
     refreshViewerIfShowing(d.id);
   };
