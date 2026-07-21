@@ -970,7 +970,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `v14.21 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.22 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -2509,7 +2509,7 @@ function showFallbackImagePreview(url, filename){
     <img src="${url}" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:8px;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto">
     <button style="margin-top:16px;padding:12px 24px;border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-weight:600;border:0" onclick="document.getElementById('imgFallback').remove()">Done</button>`;
 }
-document.getElementById('viewerSizeBtn').onclick = async () => {
+const _el1=document.getElementById('viewerSizeBtn'); if(_el1) _el1.onclick = async () => {
   const id = viewerState.ids[viewerState.index];
   if(!id){ showToast('No viewer id'); return; }
   const d = state.designs.find(x => x.id === id);
@@ -2761,20 +2761,20 @@ async function showFinalistAudit(){
   body.innerHTML = summary + '<div style="margin-top:12px;font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px">Files (first 40)</div>' + list + more;
   document.getElementById('finInfoModal').classList.add('open');
 }
-document.getElementById('finInfoClose').onclick = () => document.getElementById('finInfoModal').classList.remove('open');
-document.getElementById('finExportZipOriginals').onclick = () => exportFinalistZip('original');
-document.getElementById('finExportZipTees').onclick = () => exportFinalistZip('tee');
-document.getElementById('finExportInfo').onclick = showFinalistAudit;
+{ const _fic=document.getElementById('finInfoClose'); if(_fic) _fic.onclick = () => { const m=document.getElementById('finInfoModal'); if(m) m.classList.remove('open'); }; }
+const _el2=document.getElementById('finExportZipOriginals'); if(_el2) _el2.onclick = () => exportFinalistZip('original');
+const _el3=document.getElementById('finExportZipTees'); if(_el3) _el3.onclick = () => exportFinalistZip('tee');
+const _el4=document.getElementById('finExportInfo'); if(_el4) _el4.onclick = showFinalistAudit;
 
 // Rebuild previews button
 // Force reload handled by inline onclick on the button (bulletproof against script errors)
-document.getElementById('rebuildPreviews').onclick = () => {
+const _el5=document.getElementById('rebuildPreviews'); if(_el5) _el5.onclick = () => {
   invalidateCache();
   closeSettings();
   showToast('Previews cleared. Rebuilding as you scroll.');
   renderGrid();
 };
-document.getElementById('clearSizeOverrides').onclick = async () => {
+const _el6=document.getElementById('clearSizeOverrides'); if(_el6) _el6.onclick = async () => {
   let n = 0;
   for(const d of state.designs){
     if(d.sizeOverride){ d.sizeOverride = null; n++; await persistDesign(d); }
@@ -2784,7 +2784,7 @@ document.getElementById('clearSizeOverrides').onclick = async () => {
   showToast(`Cleared size override on ${n} designs`);
   renderGrid();
 };
-document.getElementById('clearShirtOverrides').onclick = async () => {
+const _el7=document.getElementById('clearShirtOverrides'); if(_el7) _el7.onclick = async () => {
   let n = 0;
   for(const d of state.designs){
     if(d.shirtOverride){ d.shirtOverride = null; n++; await persistDesign(d); }
@@ -2796,11 +2796,11 @@ document.getElementById('clearShirtOverrides').onclick = async () => {
 };
 
 // v14.4 share sheet buttons
-document.getElementById('shareOriginal').onclick = async () => {
+const _el8=document.getElementById('shareOriginal'); if(_el8) _el8.onclick = async () => {
   _closeShareSheet();
   await _shareViewerItem('original');
 };
-document.getElementById('shareTee').onclick = async () => {
+const _el9=document.getElementById('shareTee'); if(_el9) _el9.onclick = async () => {
   _closeShareSheet();
   await _shareViewerItem('tee');
 };
