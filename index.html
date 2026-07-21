@@ -970,7 +970,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `v14.18 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.19 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -1143,16 +1143,18 @@ function attachCardHandlers(id){
       d.sizeOverride = next;
       invalidateCache(d.id);
       await persistDesign(d);
-      const lbl = sizePill.querySelector('.cs-label');
-      if(lbl) lbl.textContent = (next === '12x16') ? '12\u00d716' : '15\u00d718';
-      // v14.14: DIRECT composite + img swap. No renderCardComposite, no races.
+      const nextLabel = (next === '12x16') ? '12\u00d716' : '15\u00d718';
+      // Always target the LIVE card in the DOM, not the captured el (which may be stale
+      // after a re-render). Update label on the live pill.
+      const liveCard = document.querySelector(`.card[data-id="${id}"]`) || el;
+      const liveLbl = liveCard.querySelector('.card-size-pill .cs-label');
+      if(liveLbl) liveLbl.textContent = nextLabel;
       try {
         const outputW = state.gridCols === 1 ? 900 : state.gridCols === 2 ? 600 : 460;
         const url = await composite(d, state.settings, outputW);
         if(!url){ showToast('Composite empty'); return; }
-        const wrap = el.querySelector('.card-preview');
+        const wrap = liveCard.querySelector('.card-preview');
         if(!wrap){ showToast('Card wrap gone'); return; }
-        // Preload then swap
         const pre = new Image();
         pre.onload = () => {
           let existingImg = wrap.querySelector('img');
@@ -1166,7 +1168,7 @@ function attachCardHandlers(id){
           }
           const skel = wrap.querySelector('.card-skeleton');
           if(skel) skel.remove();
-          el.dataset.rendered = '1';
+          liveCard.dataset.rendered = '1';
           if(navigator.vibrate) navigator.vibrate(6);
         };
         pre.onerror = () => showToast('Preload err');
