@@ -38,6 +38,13 @@
   .primary-btn svg{width:14px;height:14px}
 
   .filters{display:flex;gap:6px;padding:6px 12px 8px;overflow-x:auto;scrollbar-width:none}
+  /* v14.27 library search + sort */
+  .libbar{display:flex;gap:8px;padding:0 12px 8px;align-items:center}
+  .libsearch{flex:1;min-width:0;height:34px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);color:#fff;font-size:13px;padding:0 12px;-webkit-appearance:none;outline:none}
+  .libsearch::placeholder{color:rgba(255,255,255,.38)}
+  .libsearch:focus{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.1)}
+  .libsort{flex:0 0 auto;height:34px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);color:rgba(255,255,255,.85);font-size:12px;font-weight:500;padding:0 8px;-webkit-appearance:none;outline:none}
+  .libcount{flex:0 0 auto;font-size:11px;color:rgba(255,255,255,.45);font-variant-numeric:tabular-nums;white-space:nowrap}
   .filters::-webkit-scrollbar{display:none}
   .filter{flex:0 0 auto;height:30px;padding:0 11px;border-radius:999px;background:rgba(255,255,255,.06);font-size:12px;font-weight:500;color:rgba(255,255,255,.7);display:inline-flex;align-items:center;gap:5px;transition:all .12s}
   .filter.active{background:#fff;color:#000}
@@ -317,6 +324,17 @@
       </div>
     </div>
     <div class="filters" id="filters"></div>
+    <div class="libbar">
+      <input class="libsearch" id="libSearch" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Search name or notes…">
+      <select class="libsort" id="libSort" aria-label="Sort designs">
+        <option value="newest">Newest</option>
+        <option value="oldest">Oldest</option>
+        <option value="name">Name A–Z</option>
+        <option value="finalist">Finalists ★</option>
+        <option value="edited">Edited first</option>
+      </select>
+      <span class="libcount" id="libCount"></span>
+    </div>
   </header>
 
   <input class="file-input" type="file" id="fileInput" accept="image/*" multiple>
@@ -992,7 +1010,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `v14.26 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.27 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -1032,9 +1050,32 @@ function renderEmpty(){
 }
 
 function getFiltered(){
-  if(state.filter === 'all') return state.designs.filter(d => d.status !== 'archived' && d.status !== 'rejected');
-  if(state.filter === 'inbox') return state.designs.filter(d => d.status === 'inbox' || !STATUSES.includes(d.status));
-  return state.designs.filter(d => d.status === state.filter);
+  // 1. status filter (unchanged behaviour)
+  let list;
+  if(state.filter === 'all') list = state.designs.filter(d => d.status !== 'archived' && d.status !== 'rejected');
+  else if(state.filter === 'inbox') list = state.designs.filter(d => d.status === 'inbox' || !STATUSES.includes(d.status));
+  else list = state.designs.filter(d => d.status === state.filter);
+
+  // 2. text search over name + notes (case-insensitive, all terms must match)
+  const q = (state.search || '').trim().toLowerCase();
+  if(q){
+    const terms = q.split(/\s+/);
+    list = list.filter(d => {
+      const hay = ((d.name || '') + ' ' + (d.notes || '')).toLowerCase();
+      return terms.every(t => hay.includes(t));
+    });
+  }
+
+  // 3. sort (default newest). Copy first so we never mutate state.designs order.
+  const sort = state.sort || 'newest';
+  const byNew = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+  list = list.slice();
+  if(sort === 'oldest') list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  else if(sort === 'name') list.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, {numeric:true, sensitivity:'base'}) || byNew(a, b));
+  else if(sort === 'finalist') list.sort((a, b) => (b.finalist ? 1 : 0) - (a.finalist ? 1 : 0) || byNew(a, b));
+  else if(sort === 'edited') list.sort((a, b) => (isEdited(b) ? 1 : 0) - (isEdited(a) ? 1 : 0) || byNew(a, b));
+  else list.sort(byNew); // newest
+  return list;
 }
 
 let _cardObserver = null;
@@ -1118,8 +1159,14 @@ function initSizeDelegation(){
 function renderGrid(){
   initSizeDelegation();
   const filtered = getFiltered();
+  const searching = !!(state.search && state.search.trim());
+  const lc = document.getElementById('libCount');
+  if(lc) lc.textContent = searching ? `${filtered.length}` : '';
   if(filtered.length === 0){
-    main.innerHTML = `<div style="margin-top:80px;text-align:center;color:rgba(255,255,255,.4);font-size:14px">Nothing in this filter.</div>`;
+    const msg = searching
+      ? `No designs match “${state.search.trim()}”.`
+      : 'Nothing in this filter.';
+    main.innerHTML = `<div style="margin-top:80px;text-align:center;color:rgba(255,255,255,.4);font-size:14px">${msg}</div>`;
     return;
   }
   // Reset pagination on grid render
@@ -1876,6 +1923,32 @@ $('filters').addEventListener('click', e => {
   renderFilters();
   renderGrid();
 });
+
+// ===== v14.27 library search + sort =====
+(function(){
+  const searchEl = document.getElementById('libSearch');
+  const sortEl = document.getElementById('libSort');
+  if(searchEl){
+    searchEl.value = state.search || '';
+    let t;
+    searchEl.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        state.search = searchEl.value;
+        resetPagination();
+        renderGrid();
+      }, 140); // debounce so 20k-design filtering stays smooth while typing
+    });
+  }
+  if(sortEl){
+    sortEl.value = state.sort || 'newest';
+    sortEl.addEventListener('change', () => {
+      state.sort = sortEl.value;
+      resetPagination();
+      renderGrid();
+    });
+  }
+})();
 
 // ===== View toggle =====
 function setViewIcon(){
