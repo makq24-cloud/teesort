@@ -45,6 +45,27 @@
   .libsearch:focus{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.1)}
   .libsort{flex:0 0 auto;height:34px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);color:rgba(255,255,255,.85);font-size:12px;font-weight:500;padding:0 8px;-webkit-appearance:none;outline:none}
   .libcount{flex:0 0 auto;font-size:11px;color:rgba(255,255,255,.45);font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* v14.28 Face-off knockout */
+  .fo-overlay{position:fixed;inset:0;z-index:90;background:#0b0b0c;display:none;flex-direction:column}
+  .fo-overlay.open{display:flex;animation:fade .2s}
+  .fo-head{display:flex;align-items:center;justify-content:space-between;padding:max(env(safe-area-inset-top),12px) 14px 8px;gap:10px}
+  .fo-title{font-size:14px;font-weight:700;color:#fff}
+  .fo-sub{font-size:11px;color:rgba(255,255,255,.5);margin-top:2px}
+  .fo-x{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto;border:0}
+  .fo-x svg{width:18px;height:18px}
+  .fo-body{flex:1;display:flex;flex-direction:column;gap:8px;padding:0 12px 12px;min-height:0}
+  .fo-panel{flex:1;position:relative;border-radius:14px;overflow:hidden;background:#161618;display:flex;align-items:center;justify-content:center;min-height:0}
+  .fo-panel img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+  .fo-panel .skel{position:absolute;inset:28% 24%;border-radius:12px;background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.08),rgba(255,255,255,.04));background-size:200% 100%;animation:shimmer 1.4s infinite}
+  .fo-pick{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);height:44px;padding:0 26px;border-radius:22px;background:#fff;color:#111;font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.55);border:0;-webkit-tap-highlight-color:transparent}
+  .fo-pick:active{transform:translateX(-50%) scale(.94)}
+  .fo-vs{text-align:center;font-weight:800;font-size:12px;letter-spacing:1.5px;color:rgba(255,255,255,.4);padding:1px}
+  .fo-champ{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px;text-align:center;overflow-y:auto}
+  .fo-champ h2{color:#fff;font-size:17px;font-weight:700;word-break:break-word;max-width:90%}
+  .fo-actions{display:flex;flex-direction:column;gap:8px;width:100%;max-width:340px;margin-top:4px}
+  .fo-btn{height:48px;border-radius:12px;font-weight:600;font-size:14px;border:0}
+  .fo-btn.danger{background:rgba(255,80,80,.16);color:#ff8a8a}
+  .fo-btn.ghost{background:rgba(255,255,255,.1);color:#fff}
   .filters::-webkit-scrollbar{display:none}
   .filter{flex:0 0 auto;height:30px;padding:0 11px;border-radius:999px;background:rgba(255,255,255,.06);font-size:12px;font-weight:500;color:rgba(255,255,255,.7);display:inline-flex;align-items:center;gap:5px;transition:all .12s}
   .filter.active{background:#fff;color:#000}
@@ -312,6 +333,9 @@
       <div class="top-actions">
         <button class="icon-btn" id="compareBtn" aria-label="Compare mode">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg>
+        </button>
+        <button class="icon-btn" id="faceoffBtn" aria-label="Face-off — knock the current view down to one champion">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v3a2 2 0 0 0 2 2h3M6 20v-3a2 2 0 0 1 2-2h3M11 12h6M18 9l3 3-3 3"/></svg>
         </button>
         <button class="icon-btn" id="viewToggleBtn" aria-label="Toggle view"></button>
         <button class="icon-btn" id="settingsBtn" aria-label="Settings">
@@ -1010,7 +1034,7 @@ function render(){
 function renderContext(){
   const shirt = state.settings.shirtMode === 'auto' ? 'Auto' : (state.settings.shirtMode === 'black' ? 'Black' : 'White');
   const sz = state.settings.size === 'auto' ? '' : ' \u00b7 ' + (ZONES[state.settings.size]?.label || state.settings.size);
-  $('ctxText').textContent = `v14.27 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
+  $('ctxText').textContent = `v14.28 \u00b7 ${shirt}${sz} \u00b7 ${state.designs.length} ${state.designs.length===1?'design':'designs'}`;
 }
 
 function renderFilters(){
@@ -2274,6 +2298,123 @@ $('compareBtn').onclick = toggleCompareMode;
 $('cmpCancel').onclick = () => { if(state.compareMode) toggleCompareMode(); };
 $('cmpGo').onclick = () => { if(state.compareSel.length >= 2) openCompareOverlay(); };
 $('cmpClose').onclick = closeCompareOverlay;
+
+// ===== v14.28 Face-off: knock the current view down to ONE champion =====
+// Purpose: kill decision-paralysis on variants. Gather a concept's versions with
+// search/filters, then this shows two at a time — tap the one you'd wear, loser is
+// out — until a single champion remains. The champion is auto-crowned (finalist +
+// Keep) so the choice is committed, and the rest can be rejected in one tap.
+let faceoff = null;
+function foEl(){
+  let o = document.getElementById('foOverlay');
+  if(o) return o;
+  o = document.createElement('div');
+  o.className = 'fo-overlay';
+  o.id = 'foOverlay';
+  o.innerHTML =
+    '<div class="fo-head"><div><div class="fo-title" id="foTitle">Face-off</div>' +
+    '<div class="fo-sub" id="foSub"></div></div>' +
+    '<button class="fo-x" id="foClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>' +
+    '<div class="fo-body" id="foBody"></div>';
+  document.body.appendChild(o);
+  const x = document.getElementById('foClose');
+  if(x) x.addEventListener('click', closeFaceoff);
+  return o;
+}
+function startFaceoff(){
+  const contenders = getFiltered().filter(d => d && d.blob).map(d => d.id);
+  if(contenders.length < 2){ showToast('Need 2+ designs — search/filter to gather variants first'); return; }
+  // Light shuffle so seeding isn't biased by grid order.
+  const pool = contenders.slice();
+  for(let i = pool.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+  faceoff = { pool, pending: [], losers: [], round: 1, initial: contenders.length, a: null, b: null };
+  foEl().classList.add('open');
+  foNext();
+}
+function closeFaceoff(){ const o = document.getElementById('foOverlay'); if(o) o.classList.remove('open'); faceoff = null; }
+function foRemaining(){ const f = faceoff; return f.pool.length + f.pending.length + 2; }
+function foNext(){
+  const f = faceoff; if(!f) return;
+  // Resolve byes and round rollovers until a real pairing (or the champion) is ready.
+  while(f.pool.length < 2){
+    if(f.pool.length === 1) f.pending.push(f.pool.pop());   // odd one out gets a bye
+    if(f.pool.length === 0){
+      if(f.pending.length <= 1){ foChampion(f.pending[0]); return; }
+      f.pool = f.pending; f.pending = []; f.round++;
+    }
+  }
+  f.a = f.pool.shift(); f.b = f.pool.shift();
+  foRenderPair();
+}
+function foPanelHtml(id, slot){
+  return '<div class="fo-panel" data-slot="' + slot + '" data-id="' + id + '"><div class="skel"></div>' +
+    '<button class="fo-pick" data-id="' + id + '">Pick this</button></div>';
+}
+function foRenderPair(){
+  const f = faceoff; if(!f) return;
+  const t = document.getElementById('foTitle'), s = document.getElementById('foSub');
+  if(t) t.textContent = 'Which would you wear?';
+  if(s) s.textContent = 'Round ' + f.round + ' · ' + foRemaining() + ' left · ' + f.losers.length + '/' + (f.initial - 1) + ' decided';
+  const body = document.getElementById('foBody');
+  body.innerHTML = foPanelHtml(f.a, 'a') + '<div class="fo-vs">VS</div>' + foPanelHtml(f.b, 'b');
+  foLoadPanel(f.a, 'a'); foLoadPanel(f.b, 'b');
+  body.querySelectorAll('.fo-pick').forEach(btn => btn.addEventListener('click', () => foPick(btn.dataset.id)));
+}
+async function foLoadPanel(id, slot){
+  const d = state.designs.find(x => x.id === id);
+  if(!d) return;
+  try {
+    const url = await composite(d, state.settings, 900);
+    const panel = document.querySelector('.fo-panel[data-slot="' + slot + '"]');
+    if(!panel || !faceoff) return;
+    if(panel.getAttribute('data-id') !== id) return;   // pairing advanced; stale load
+    const img = new Image();
+    img.onload = () => { const sk = panel.querySelector('.skel'); if(sk) sk.remove(); panel.insertBefore(img, panel.querySelector('.fo-pick')); };
+    img.src = url;
+  } catch(e){ /* leave skeleton; Pick still works */ }
+}
+function foPick(winnerId){
+  const f = faceoff; if(!f) return;
+  const loser = (winnerId === f.a) ? f.b : f.a;
+  f.pending.push(winnerId); f.losers.push(loser);
+  if(navigator.vibrate) navigator.vibrate(8);
+  foNext();
+}
+async function foChampion(id){
+  const f = faceoff; if(!f) return;
+  const losers = f.losers.slice();
+  const d = state.designs.find(x => x.id === id);
+  // Commit the decision: champion becomes a finalist and Kept.
+  if(d){ d.finalist = true; if(d.status !== 'round1') d.status = 'round1'; await persistDesign(d); }
+  const t = document.getElementById('foTitle'), s = document.getElementById('foSub');
+  if(t) t.textContent = 'Champion';
+  if(s) s.textContent = 'Beat ' + losers.length + ' other' + (losers.length === 1 ? '' : 's');
+  const body = document.getElementById('foBody');
+  body.innerHTML =
+    '<div class="fo-champ"><div style="font-size:34px">🏆</div>' +
+    '<div class="fo-champ-img" style="position:relative;width:100%;display:flex;justify-content:center"><div class="skel" style="position:relative;width:58%;height:38vh;border-radius:12px"></div></div>' +
+    '<h2>' + ((d && d.name) ? d.name.replace(/</g,'&lt;') : 'Champion') + '</h2>' +
+    '<div class="fo-sub" style="color:rgba(255,255,255,.6)">Crowned ★ and kept.</div>' +
+    '<div class="fo-actions">' +
+    '<button class="fo-btn danger" id="foRejectRest">Reject the other ' + losers.length + '</button>' +
+    '<button class="fo-btn ghost" id="foDone">Done</button></div></div>';
+  if(d){ try {
+    const url = await composite(d, state.settings, 1100);
+    const holder = body.querySelector('.fo-champ-img');
+    if(holder){ const img = new Image(); img.onload = () => { holder.innerHTML = ''; img.style.cssText = 'max-width:88%;max-height:42vh;object-fit:contain;border-radius:14px'; holder.appendChild(img); }; img.src = url; }
+  } catch(e){} }
+  renderFilters();
+  const done = document.getElementById('foDone');
+  if(done) done.addEventListener('click', () => { closeFaceoff(); renderGrid(); });
+  const rej = document.getElementById('foRejectRest');
+  if(rej) rej.addEventListener('click', async () => {
+    if(rej.dataset.confirm !== '1'){ rej.dataset.confirm = '1'; rej.textContent = 'Tap again to reject ' + losers.length; return; }
+    for(const lid of losers){ const ld = state.designs.find(x => x.id === lid); if(ld){ ld.status = 'rejected'; await persistDesign(ld); } }
+    showToast('Rejected ' + losers.length + ' · recover in the Rejected filter');
+    closeFaceoff(); renderFilters(); renderGrid();
+  });
+}
+const _foBtn = document.getElementById('faceoffBtn'); if(_foBtn) _foBtn.addEventListener('click', startFaceoff);
 
 // ===== Fullscreen viewer (v3 - simple single-slide) =====
 let viewerState = {
